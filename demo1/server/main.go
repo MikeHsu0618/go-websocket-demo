@@ -18,6 +18,8 @@ func socketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	log.Println("connected")
+
 	// The event loop
 	for {
 		messageType, message, err := conn.ReadMessage()
@@ -26,7 +28,8 @@ func socketHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		log.Printf("Server Received: %s", message)
-		err = conn.WriteMessage(messageType, message)
+		log.Println(messageType)
+		err = conn.WriteMessage(messageType, []byte(`來自 Server 的關心`))
 		if err != nil {
 			log.Println("Error during message writing:", err)
 			break
