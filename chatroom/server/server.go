@@ -55,21 +55,9 @@ func consumeMessage() {
 func processMessage(msg string) {
 	contents := strings.Split(msg, "#")
 	if len(contents) > 1 {
-		//address := strings.Trim(contents[0], " ")
 		content := contents[1]
 
-		// 連接
-		for _, conn := range onlineConns {
-			_, err := conn.Write([]byte(content))
-			if err != nil {
-				log.Fatal("發送失敗", err)
-			}
-			log.Println("發送消息：", content, "目的地：", conn.RemoteAddr())
-		}
-	} else {
-		// 查看 list
-		contents = strings.Split(msg, "&")
-		if contents[1] == "list" {
+		if content == "list" {
 			var str string
 			for i := range onlineConns {
 				str += "||||" + i
@@ -85,6 +73,17 @@ func processMessage(msg string) {
 				log.Fatal("發送失敗", err)
 			}
 			log.Println("發送消息：", str, "目的地：", conn.RemoteAddr())
+
+			return
+		}
+
+		// 連接
+		for _, conn := range onlineConns {
+			_, err := conn.Write([]byte(content))
+			if err != nil {
+				log.Fatal("發送失敗", err)
+			}
+			log.Println("發送消息：", content, "目的地：", conn.RemoteAddr())
 		}
 	}
 }
@@ -105,9 +104,8 @@ func receiveInfo(conn net.Conn) {
 			continue
 		}
 
-		address := conn.RemoteAddr()
 		content := string(buffer[:nums])
-		log.Println("收到消息：", content, "來自：", address)
+		log.Println("收到消息：", content, "來自：", conn.RemoteAddr())
 
 		if content == "exit" {
 			log.Println("客戶端：", conn.RemoteAddr(), "正在退出....")
@@ -119,9 +117,7 @@ func receiveInfo(conn net.Conn) {
 }
 
 func clientExit(conn net.Conn) {
-	address := conn.RemoteAddr()
-
-	delete(onlineConns, address.String())
+	delete(onlineConns, conn.RemoteAddr().String())
 
 	conn.Close()
 
