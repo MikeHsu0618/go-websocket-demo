@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-const log_path = "../logs/"
-
 var (
 	onlineConns = make(map[string]net.Conn)
 	msgChan     = make(chan string, 1024)
