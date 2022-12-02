@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "webapi.ckex.xyz", "http service address")
+var addr = flag.String("addr", "localhost:8080", "http service address")
 
 func main() {
 	flag.Parse()
@@ -20,7 +20,7 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	u := url.URL{Scheme: "wss", Host: *addr, Path: "/dev-f/quote/betfair-orderbook"}
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/socket"}
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)

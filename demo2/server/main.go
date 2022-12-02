@@ -20,7 +20,9 @@ func socketHandler(w http.ResponseWriter, r *http.Request) {
 
 	// The event loop
 	for {
+		fmt.Println("來了喔")
 		messageType, message, err := conn.ReadMessage()
+		fmt.Println("沒塞")
 		if err != nil {
 			log.Println("Error during message reading:", err)
 			break
