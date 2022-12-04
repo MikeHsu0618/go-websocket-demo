@@ -1,5 +1,4 @@
 # One-To-One Chat
----
 
 The One-To-One Chat project implements 1:1 message to any active username via websocket simply.
 
