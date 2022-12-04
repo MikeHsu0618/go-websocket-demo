@@ -6,8 +6,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -35,6 +37,10 @@ var (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	// allow cors
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 // Client is a middleman between the websocket connection and the hub.
@@ -45,7 +51,9 @@ type Client struct {
 	conn *websocket.Conn
 
 	// Buffered channel of outbound messages.
-	send chan []byte
+	send chan MessageResponse
+
+	Username string `json:"username"`
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -70,7 +78,28 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.hub.broadcast <- message
+		var msgReq MessageRequest
+		_ = json.Unmarshal(message, &msgReq)
+		if msgReq.Type == OneToOne {
+			msgResp := MessageResponse{
+				Code: 200,
+				Type: OneToOne,
+				Msg:  msgReq.Msg,
+				Data: map[string]interface{}{
+					"from_username": c.Username,
+					"to_username":   msgReq.Data.(map[string]interface{})["to_username"].(string),
+				},
+			}
+			c.hub.oneToOne <- msgResp
+		} else {
+			msgResp := MessageResponse{
+				Code: 200,
+				Type: Broadcast,
+				Msg:  msgReq.Msg,
+				Data: nil,
+			}
+			c.hub.broadcast <- msgResp
+		}
 	}
 }
 
@@ -95,22 +124,8 @@ func (c *Client) writePump() {
 				return
 			}
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
-			w.Write(message)
+			c.sendMessage(message)
 
-			// Add queued chat messages to the current websocket message.
-			n := len(c.send)
-			for i := 0; i < n; i++ {
-				w.Write(newline)
-				w.Write(<-c.send)
-			}
-
-			if err := w.Close(); err != nil {
-				return
-			}
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -120,14 +135,67 @@ func (c *Client) writePump() {
 	}
 }
 
+func (c *Client) sendMessage(message MessageResponse) {
+	msgJson, err := json.Marshal(message)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	w, err := c.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return
+	}
+	w.Write(msgJson)
+	if message.Code >= 400 {
+		c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+		return
+	}
+
+	// Add queued chat messages to the current websocket message.
+	n := len(c.send)
+	for i := 0; i < n; i++ {
+		msgJson, err := json.Marshal(<-c.send)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		w.Write(newline)
+		w.Write(msgJson)
+		if message.Code >= 400 {
+			c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			return
+		}
+	}
+	if err := w.Close(); err != nil {
+		return
+	}
+}
+
 // serveWs handles websocket requests from the peer.
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	// validate username
+	if query.Get("username") == "" {
+		log.Println("Empty Username Error")
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
+
+	client := &Client{
+		Username: query.Get("username"),
+		hub:      hub,
+		conn:     conn,
+		send:     make(chan MessageResponse, 256),
+	}
 	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in

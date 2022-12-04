@@ -23,7 +23,12 @@
                 if (!msg.value) {
                     return false;
                 }
-                conn.send(msg.value);
+                conn.send(JSON.stringify({
+                    type: 1,
+                    from_user_id: 1,
+                    to_user_id: 2,
+                    msg: msg.value
+                }));
                 msg.value = "";
                 return false;
             };
@@ -43,7 +48,10 @@
                         appendLog(item);
                     }
                 };
-            } else {
+                conn.onerror = function (evt) {
+                    console.log(evt)
+                }
+                } else {
                 var item = document.createElement("div");
                 item.innerHTML = "<b>Your browser does not support WebSockets.</b>";
                 appendLog(item);
