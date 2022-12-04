@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  trade:
+    container_name: "chat"
+    build:
+      context: .
+      dockerfile: ./build/chat/dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/app
+    tty: true
+    privileged: true
