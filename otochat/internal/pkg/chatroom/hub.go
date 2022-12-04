@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package chatroom
 
 import (
-	"fmt"
+	"otochat/internal/entity"
 	"strings"
 	"sync"
 )
@@ -17,13 +17,13 @@ type Hub struct {
 	clients map[string]*Client
 
 	// Inbound messages from the clients.
-	broadcast chan MessageResponse
+	broadcast chan entity.MessageResponse
 
 	// Inbound messages for one on one.
-	oneToOne chan MessageResponse
+	oneToOne chan entity.MessageResponse
 
 	// Register requests from the clients.
-	register chan *Client
+	Register chan *Client
 
 	// Unregister requests from clients.
 	unregister chan *Client
@@ -32,13 +32,13 @@ type Hub struct {
 	mux sync.Mutex
 }
 
-func newHub() *Hub {
+func NewHub() *Hub {
 	return &Hub{
-		register:   make(chan *Client),
+		Register:   make(chan *Client),
 		unregister: make(chan *Client),
 		clients:    make(map[string]*Client),
-		broadcast:  make(chan MessageResponse),
-		oneToOne:   make(chan MessageResponse),
+		broadcast:  make(chan entity.MessageResponse),
+		oneToOne:   make(chan entity.MessageResponse),
 	}
 }
 
@@ -46,13 +46,7 @@ func (h *Hub) registerClient(client *Client) {
 	h.mux.Lock()
 	defer h.mux.Unlock()
 	if _, ok := h.clients[client.Username]; ok || client.Username == "" {
-		msg := MessageResponse{
-			Code: 404,
-			Type: OneToOne,
-			Msg:  "Existed Username: " + client.Username,
-			Data: nil,
-		}
-		client.send <- msg
+		client.Send <- entity.NewMessageResponse(403, entity.OneToOne, "Existed Username: "+client.Username, nil)
 		return
 	}
 	h.clients[client.Username] = client
@@ -66,57 +60,53 @@ func (h *Hub) unregisterClient(client *Client) {
 		if client == c {
 			delete(h.clients, client.Username)
 		}
-		close(client.send)
+		close(client.Send)
 	}
 	h.notifyClients()
 }
 
 func (h *Hub) notifyClients() {
-	// 登入時取得上線人數
-	fmt.Println(len(h.clients))
-	users := make([]Client, 0)
+	// get user list while anyone online or offline
+	users := make([]*Client, 0)
 	userStrArr := make([]string, 0)
 	for username, _ := range h.clients {
 		userStrArr = append(userStrArr, username)
-		users = append(users, Client{Username: username})
+		users = append(users, &Client{Username: username})
 	}
-	msg := MessageResponse{
-		Code: 200,
-		Type: OnlineUsers,
-		Msg:  "當前上線使用者: " + strings.Join(userStrArr, ", "),
-		Data: map[string]interface{}{
-			"users": users,
-		},
-	}
+	msg := entity.NewMessageResponse(
+		200,
+		entity.OnlineUsers,
+		"當前上線使用者: "+strings.Join(userStrArr, ", "),
+		map[string]interface{}{"users": users})
 	for _, client := range h.clients {
-		client.send <- msg
+		client.Send <- msg
 	}
 }
 
-func (h *Hub) run() {
+func (h *Hub) Run() {
 	for {
 		select {
-		case client := <-h.register:
+		case client := <-h.Register:
 			h.registerClient(client)
 		case client := <-h.unregister:
 			h.unregisterClient(client)
 		case message := <-h.broadcast:
 			for username, client := range h.clients {
 				select {
-				case client.send <- message:
+				case client.Send <- message:
 				default:
-					close(client.send)
+					close(client.Send)
 					delete(h.clients, username)
 				}
 			}
 		case message := <-h.oneToOne:
-			// 只傳訊息給 one to one 雙方
+			// only sent to each other
 			for username, client := range h.clients {
 				if username != message.Data.(map[string]interface{})["to_username"].(string) &&
 					username != message.Data.(map[string]interface{})["from_username"].(string) {
 					continue
 				}
-				client.send <- message
+				client.Send <- message
 			}
 		}
 	}

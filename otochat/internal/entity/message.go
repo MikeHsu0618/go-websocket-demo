@@ -1,4 +1,4 @@
-package main
+package entity
 
 type Type int
 
@@ -19,4 +19,13 @@ type MessageRequest struct {
 	Type Type        `json:"type"`
 	Msg  string      `json:"msg"`
 	Data interface{} `json:"data"`
+}
+
+func NewMessageResponse(code int, t Type, msg string, data interface{}) MessageResponse {
+	return MessageResponse{
+		Code: code,
+		Type: t,
+		Msg:  msg,
+		Data: data,
+	}
 }
